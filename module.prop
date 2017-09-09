@@ -1,7 +1,7 @@
-id=VolSteps
-name=Volume Steps
+id=VolumeSteps
+name=Volume Level Steps
 version=v0.1
 versionCode=1
-author=Riku Azhurlar
-description=Change volume steps sytemlessly
-template=1400
+author=RikuAzhurlar
+description=change volume level steps to double the normal amount
+template=4
