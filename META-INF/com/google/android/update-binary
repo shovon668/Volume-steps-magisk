@@ -142,8 +142,41 @@ done
 # Auto Mount
 $AUTOMOUNT && touch $MODPATH/auto_mount
 
+#BEGIN TEST SCRIPT: Custom prop file
+#CREATE DEFAULT VARIABLE
+VOLUMEPROP=$INSTALLER/common/system.prop
+#check internal storage path
+
+if [ -d "/data/media/0" ]; then
+  SDCARD=/data/media/0
+elif [ -d "/storage/emulated/0" ]; then
+  SDCARD=/storage/emulated/0
+elif [ -d "/sdcard/0" ]; then
+  SDCARD=/sdcard/0
+elif [ -d "/sdcard_internal/0" ]; then
+  SDCARD=/sdcard_internal/0
+elif [ -d "/sdcard_internal" ]; then
+  SDCARD=/sdcard_internal
+else
+  SDCARD=/sdcard
+fi
+
+#check custom file exists
+if [ -f $SDCARD/volume_steps.prop ];  then
+VOLUMEPROP=$SDCARD/volume_steps.prop
+ui_print "- Custom volume prop found!"
+ui_print "- Using custom prop file..."
+else
+ui_print "- No custom prop file found..."
+ui_print "- Using default values..."
+fi
+
+cp -af  "$VOLUMEPROP" $MODPATH/system.prop
+
+
+#original code backup
 # prop files
-$PROPFILE && cp -af $INSTALLER/common/system.prop $MODPATH/system.prop
+#$PROPFILE && cp -af $INSTALLER/common/#system.prop $MODPATH/system.prop
 
 # Module info
 cp -af $INSTALLER/module.prop $MODPATH/module.prop

@@ -15,6 +15,9 @@ ro.config.media_vol_steps=30
 ```
 ___
 
+# Requirements
++ magisk 13.0+
+___
 # Installation
 
 for installation instructions check the xda thread - (will add soon)
@@ -23,3 +26,9 @@ for installation instructions check the xda thread - (will add soon)
    Since this just makes build.prop edits that every android should accept because of the code to accept theese is in the [AudioService.java](https://android.googlesource.com/platform/frameworks/base/+/master/services/core/java/com/android/server/audio/AudioService.java#624)
    
 Any other questions just hop over to the xda thread - (will add soon) or leave a bug report on the repo ill do my best to help!
+
+
+## TODO
+
+- [ ] aroma installer package for easier custom props
+- [ ] partner apk to change prop file after install
