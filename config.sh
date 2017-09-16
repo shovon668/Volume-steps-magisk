@@ -48,7 +48,7 @@ LATESTARTSERVICE=false
 
 print_modname() {
   ui_print "*******************************"
-  ui_print "     Volume level steps v0.1        "
+  ui_print "     Volume level steps v1.0        "
   ui_print "*******************************"
 }
 
