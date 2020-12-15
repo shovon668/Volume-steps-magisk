@@ -8,15 +8,15 @@ Currently this mod changes the in call volume steps to 14 (android default: 7) a
 ___
 
 ## How does it work? 
-it works by using magisk system.prop to add two build prop lines
+it works by using magisk system.prop to add a build prop line
 ``` 
-ro.config.vc_call_vol_steps=14
 ro.config.media_vol_steps=30
 ```
 ___
 
 # Requirements
-+ magisk 13.0+
++ magisk 19.0+
++ Android 9 or higher (Works on android 11!)
 ___
 # Installation
 
@@ -25,10 +25,3 @@ for installation instructions check the xda thread - (will add soon)
 + __will this work on X device?__ 
    Since this just makes build.prop edits that every android should accept because of the code to accept theese is in the [AudioService.java](https://android.googlesource.com/platform/frameworks/base/+/master/services/core/java/com/android/server/audio/AudioService.java#624)
    
-Any other questions just hop over to the xda thread - (will add soon) or leave a bug report on the repo ill do my best to help!
-
-
-## TODO
-
-- [ ] aroma installer package for easier custom props
-- [ ] partner apk to change prop file after install
