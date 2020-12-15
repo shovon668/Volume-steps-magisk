@@ -1,216 +1,173 @@
 #!/sbin/sh
-##########################################################################################
-#
-# Magisk Module Template Install Script
-# by topjohnwu
-# 
-##########################################################################################
 
-# Detect whether in boot mode
-ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false
-$BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true
+#################
+# Initialization
+#################
 
-# This path should work in any cases
-TMPDIR=/dev/tmp
-MOUNTPATH=/magisk
-IMG=/data/magisk.img
-if $BOOTMODE; then
-  MOUNTPATH=/dev/magisk_merge
-  IMG=/data/magisk_merge.img
-fi
-INSTALLER=$TMPDIR/install
-MAGISKBIN=/data/magisk
-
-# Default permissions
 umask 022
 
-##########################################################################################
-# Flashable update-binary preparation
-##########################################################################################
+# Global vars
+TMPDIR=/dev/tmp
+PERSISTDIR=/sbin/.magisk/mirror/persist
 
-OUTFD=$2
-ZIP=$3
+rm -rf $TMPDIR 2>/dev/null
+mkdir -p $TMPDIR
 
-ui_print() {
-  if $BOOTMODE; then
-    echo "$1"
-  else 
-    echo -n -e "ui_print $1\n" >> /proc/self/fd/$OUTFD
-    echo -n -e "ui_print\n" >> /proc/self/fd/$OUTFD
-  fi
-}
+# echo before loading util_functions
+ui_print() { echo "$1"; }
 
 require_new_magisk() {
-  ui_print "***********************************"
-  ui_print "! $MAGISKBIN isn't setup properly!"
-  ui_print "! Please install Magisk v13.1+!"
-  ui_print "***********************************"
+  ui_print "*******************************"
+  ui_print " Please install Magisk v19.0+! "
+  ui_print "*******************************"
   exit 1
 }
 
-# Mount /data to access MAGISKBIN
+is_legacy_script() {
+  unzip -l "$ZIPFILE" install.sh | grep -q install.sh
+  return $?
+}
+
+print_modname() {
+  local len
+  len=`echo -n $MODNAME | wc -c`
+  len=$((len + 2))
+  local pounds=`printf "%${len}s" | tr ' ' '*'`
+  ui_print "$pounds"
+  ui_print " $MODNAME "
+  ui_print "$pounds"
+  ui_print "*******************"
+  ui_print " Powered by Magisk "
+  ui_print "*******************"
+}
+
+##############
+# Environment
+##############
+
+OUTFD=$2
+ZIPFILE=$3
+
 mount /data 2>/dev/null
 
-# MAGISKBIN must exist, binaries and utility functions are placed there
-[ -d $MAGISKBIN -a -f $MAGISKBIN/magisk -a -f $MAGISKBIN/util_functions.sh ] || require_new_magisk
+# Load utility functions
+[ -f /data/adb/magisk/util_functions.sh ] || require_new_magisk
+. /data/adb/magisk/util_functions.sh
+[ $MAGISK_VER_CODE -gt 18100 ] || require_new_magisk
 
-# Load utility fuctions
-. $MAGISKBIN/util_functions.sh
-[ ! -z $SCRIPT_VERSION -a $SCRIPT_VERSION -ge 1310 ] || require_new_magisk
-get_outfd
+# Preperation for flashable zips
+setup_flashable
 
-rm -rf $TMPDIR 2>/dev/null
-mkdir -p $INSTALLER
-unzip -o "$ZIP" config.sh -d $INSTALLER 2>/dev/null
-
-##########################################################################################
-# Prepare
-##########################################################################################
-
-[ ! -f $INSTALLER/config.sh ] && abort "! Unable to extract zip file!"
-
-. $INSTALLER/config.sh
-
-MODPATH=$MOUNTPATH/$MODID
-
-# Print mod name
-print_modname
-
-# Please leave this message in your flashable zip for credits :)
-ui_print "******************************"
-ui_print "Powered by Magisk (@topjohnwu)"
-ui_print "******************************"
-
-ui_print "- Mounting /system, /vendor, /data, /cache"
-mount -o ro /system 2>/dev/null
-mount -o ro /vendor 2>/dev/null
-mount /data 2>/dev/null
-mount /cache 2>/dev/null
-
-[ ! -f /data/magisk.img ] && abort "! Magisk is not installed"
-$BOOTMODE && ! is_mounted /magisk && abort "! Magisk is not activated!"
-[ ! -f /system/build.prop ] && abort "! /system could not be mounted!"
+# Mount partitions
+mount_partitions
 
 # Detect version and architecture
 api_level_arch_detect
 
-# You can get the Android API version from $API, the CPU architecture from $ARCH
-# Useful if you are creating Android version / platform dependent mods
+# Setup busybox and binaries
+$BOOTMODE && boot_actions || recovery_actions
 
-##########################################################################################
-# Install
-##########################################################################################
+##############
+# Preparation
+##############
 
-ui_print "- Extracting module files"
-unzip -o "$ZIP" -d $INSTALLER 2>/dev/null
-request_size_check $INSTALLER
+# Extract prop file
+unzip -o "$ZIPFILE" module.prop -d $TMPDIR >&2
+[ ! -f $TMPDIR/module.prop ] && abort "! Unable to extract zip file!"
 
-# We're going to use magisk binary now, require some recovery fixes
-$BOOTMODE || recovery_actions
-
-if [ -f "$IMG" ]; then
-  ui_print "- $IMG detected!"
-  image_size_check $IMG
-  if [ "$reqSizeM" -gt "$curFreeM" ]; then
-    newSizeM=$(((reqSizeM + curUsedM) / 32 * 32 + 64))
-    ui_print "- Resizing $IMG to ${newSizeM}M"
-    $MAGISKBIN/magisk --resizeimg $IMG $newSizeM
-  fi
-else
-  newSizeM=$((reqSizeM / 32 * 32 + 64));
-  ui_print "- Creating $IMG with size ${newSizeM}M"
-  $MAGISKBIN/magisk --createimg $IMG $newSizeM
-fi
-
-ui_print "- Mounting $IMG to $MOUNTPATH"
-MAGISKLOOP=`$MAGISKBIN/magisk --mountimg $IMG $MOUNTPATH`
-is_mounted $MOUNTPATH || abort"! $IMG mount failed..."
+$BOOTMODE && MODDIRNAME=modules_update || MODDIRNAME=modules
+MODULEROOT=$NVBASE/$MODDIRNAME
+MODID=`grep_prop id $TMPDIR/module.prop`
+MODPATH=$MODULEROOT/$MODID
+MODNAME=`grep_prop name $TMPDIR/module.prop`
 
 # Create mod paths
 rm -rf $MODPATH 2>/dev/null
 mkdir -p $MODPATH
 
-# Copy files
-ui_print "- Copying files"
-mv $INSTALLER/system $MODPATH/system
+##########
+# Install
+##########
+
+if is_legacy_script; then
+  unzip -oj "$ZIPFILE" module.prop install.sh uninstall.sh 'common/*' -d $TMPDIR >&2
+
+  # Load install script
+  . $TMPDIR/install.sh
+
+  # Callbacks
+  print_modname
+  on_install
+
+  # Custom uninstaller
+  [ -f $TMPDIR/uninstall.sh ] && cp -af $TMPDIR/uninstall.sh $MODPATH/uninstall.sh
+
+  # Skip mount
+  $SKIPMOUNT && touch $MODPATH/skip_mount
+
+  # prop file
+  $PROPFILE && cp -af $TMPDIR/system.prop $MODPATH/system.prop
+
+  # Module info
+  cp -af $TMPDIR/module.prop $MODPATH/module.prop
+
+  # post-fs-data scripts
+  $POSTFSDATA && cp -af $TMPDIR/post-fs-data.sh $MODPATH/post-fs-data.sh
+
+  # service scripts
+  $LATESTARTSERVICE && cp -af $TMPDIR/service.sh $MODPATH/service.sh
+
+  ui_print "- Setting permissions"
+  set_permissions
+else
+  print_modname
+
+  unzip -o "$ZIPFILE" customize.sh -d $MODPATH >&2
+
+  if ! grep -q '^SKIPUNZIP=1$' $MODPATH/customize.sh 2>/dev/null; then
+    ui_print "- Extracting module files"
+    unzip -o "$ZIPFILE" -x 'META-INF/*' -d $MODPATH >&2
+
+    # Default permissions
+    set_perm_recursive $MODPATH 0 0 0755 0644
+  fi
+
+  # Load customization script
+  [ -f $MODPATH/customize.sh ] && . $MODPATH/customize.sh
+fi
 
 # Handle replace folders
 for TARGET in $REPLACE; do
+  ui_print "- Replace target: $TARGET"
   mktouch $MODPATH$TARGET/.replace
 done
 
-# Auto Mount
-$AUTOMOUNT && touch $MODPATH/auto_mount
-
-#BEGIN TEST SCRIPT: Custom prop file
-#CREATE DEFAULT VARIABLE
-VOLUMEPROP=$INSTALLER/common/system.prop
-#check internal storage path
-
-if [ -d "/data/media/0" ]; then
-  SDCARD=/data/media/0
-elif [ -d "/storage/emulated/0" ]; then
-  SDCARD=/storage/emulated/0
-elif [ -d "/sdcard/0" ]; then
-  SDCARD=/sdcard/0
-elif [ -d "/sdcard_internal/0" ]; then
-  SDCARD=/sdcard_internal/0
-elif [ -d "/sdcard_internal" ]; then
-  SDCARD=/sdcard_internal
-else
-  SDCARD=/sdcard
-fi
-
-#check custom file exists
-if [ -f $SDCARD/volume_steps.prop ];  then
-VOLUMEPROP=$SDCARD/volume_steps.prop
-ui_print "- Custom volume prop found!"
-ui_print "- Using custom prop file..."
-else
-ui_print "- No custom prop file found..."
-ui_print "- Using default values..."
-fi
-
-cp -af  "$VOLUMEPROP" $MODPATH/system.prop
-
-
-#original code backup
-# prop files
-#$PROPFILE && cp -af $INSTALLER/common/#system.prop $MODPATH/system.prop
-
-# Module info
-cp -af $INSTALLER/module.prop $MODPATH/module.prop
 if $BOOTMODE; then
   # Update info for Magisk Manager
-  mktouch /magisk/$MODID/update
-  cp -af $INSTALLER/module.prop /magisk/$MODID/module.prop
+  mktouch $NVBASE/modules/$MODID/update
+  cp -af $MODPATH/module.prop $NVBASE/modules/$MODID/module.prop
 fi
 
-# post-fs-data mode scripts
-$POSTFSDATA && cp -af $INSTALLER/common/post-fs-data.sh $MODPATH/post-fs-data.sh
+# Copy over custom sepolicy rules
+if [ -f $MODPATH/sepolicy.rule -a -e $PERSISTDIR ]; then
+  ui_print "- Installing custom sepolicy patch"
+  PERSISTMOD=$PERSISTDIR/magisk/$MODID
+  mkdir -p $PERSISTMOD
+  cp -af $MODPATH/sepolicy.rule $PERSISTMOD/sepolicy.rule
+fi
 
-# service mode scripts
-$LATESTARTSERVICE && cp -af $INSTALLER/common/service.sh $MODPATH/service.sh
+# Remove stuffs that don't belong to modules
+rm -rf \
+$MODPATH/system/placeholder $MODPATH/customize.sh \
+$MODPATH/README.md $MODPATH/.git* 2>/dev/null
 
-ui_print "- Setting permissions"
-set_permissions
-
-##########################################################################################
+##############
 # Finalizing
-##########################################################################################
+##############
 
-$MAGISKBIN/magisk --umountimg $MOUNTPATH $MAGISKLOOP
-rmdir $MOUNTPATH
-
-# Shrink the image if possible
-image_size_check $IMG
-newSizeM=$((curUsedM / 32 * 32 + 64))
-if [ $curSizeM -gt $newSizeM ]; then
-  ui_print "- Shrinking $IMG to ${newSizeM}M"
-  $MAGISKBIN/magisk --resizeimg $IMG $newSizeM
-fi
-
+cd /
 $BOOTMODE || recovery_cleanup
+rm -rf $TMPDIR
 
-ui_print "- Done"
+ui_print "- Finished installing Volume Steps Changer!"
 exit 0
