@@ -2,3 +2,4 @@
 # Example: Change dpi
 # ro.sf.lcd_density=320
 ro.config.media_vol_steps=30
+audio.safemedia.bypass=true
